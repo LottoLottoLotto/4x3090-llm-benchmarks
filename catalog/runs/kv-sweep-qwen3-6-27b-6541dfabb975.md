@@ -1,0 +1,47 @@
+# `kvsweep/Qwen3.6-27B-FP8/c32768/auto`
+
+| field | value |
+|---|---|
+| Date | 2026-06-28 |
+| Campaign | kv-sweep |
+| Model | Qwen3.6-27B |
+| Checkpoint | Qwen3.6-27B-FP8 |
+| Quant | fp8-static |
+| Quant method | fp8 |
+| Engine | vllm |
+| Engine version | 0.23.0 |
+| Objective | kv_dtype_sweep |
+| TPS kind | unknown |
+| Layout | TP=4 |
+| Context | 32768 |
+| Concurrency | 1 |
+| KV cache | auto |
+| Power limit | 220 W/GPU |
+| Normalization | inferred |
+
+## Metrics
+
+| metric | value |
+|---|---:|
+| `output_tok_s` | 7.21 |
+| `decode_tok_s` | 57.7 |
+| `prefill_tok_s` | 947.5 |
+| `ttft_p50_ms` | 34314.7 |
+| `itl_p50_ms` | 17.44 |
+
+## Launch command
+
+```bash
+vllm serve <Qwen3.6-27B-FP8 weights> --tensor-parallel-size 4 --max-model-len 131072 --kv-cache-dtype auto --served-model-name bench  # kv_cache_summarize.py driver
+```
+
+## Provenance
+
+- `repo:llm-bench/results/kv-cache-sweep-2026-06-28`
+- `rig:~/benchmarks/kv-cache-sweep-2026-06-28`
+
+## Notes
+
+KV-dtype sweep. peak_out 7.21@c16. vLLM 0.23.0, tp=4, max_model_len=131072.
+
+Generated from `data/benchmarks.jsonl`. Do not edit by hand.
