@@ -1,6 +1,21 @@
-# 4x3090 LLM benchmarks
+# 4x RTX 3090 LLM benchmark archive
 
-I run local models on a 4x RTX 3090 rig and keep the speed measurements here.
+**638 local inference measurements from one 96 GB home rig. The exact launch
+command is attached to 637 of them.**
+
+Most benchmark posts give you a model name and one `tok/s` number. I kept
+losing the rest: which checkpoint, which quant, which KV dtype, which TP layout,
+which engine build, and whether the number meant single-stream decode or
+aggregate throughput.
+
+This repository is the database I wanted. You can inspect one result in the
+[Markdown catalog](catalog/README.md), query all of them in SQLite, or take the
+JSONL and run your own analysis.
+
+[Browse the catalog](catalog/README.md) ·
+[Query the data](QUERYING.md) ·
+[Read the methodology](METHODOLOGY.md) ·
+[See the rig](HARDWARE.md)
 
 <!-- archive-summary:start -->
 The archive currently has 638 measurements from 20 benchmark campaigns across
@@ -14,15 +29,67 @@ source references, and launch command when available. 637 of 638 measurements
 retain an exact argv or command.
 <!-- archive-summary:end -->
 
-## Start here
+## What makes one row useful
 
-| I want to | Open |
+Every result keeps the context needed to understand or reproduce it:
+
+| Recorded with the number | Examples |
 |---|---|
-| Browse models, campaigns, and engines | [Benchmark catalog](catalog/README.md) |
-| Inspect every field and exact command for one run | Follow a run link from the catalog |
-| Query the complete dataset | [Querying the archive](QUERYING.md) |
-| Understand what can be compared | [Methodology and limitations](METHODOLOGY.md) |
-| Check the physical rig | [Hardware](HARDWARE.md) |
+| Model artifact | checkpoint, quantization recipe, source revision |
+| Runtime | engine, version, attention backend, KV-cache dtype |
+| GPU layout | TP, PP, DP, instance count, power limit, P2P state |
+| Workload | prompt length, output length, concurrency, context limit |
+| Metric meaning | single-stream wall rate, decode rate, aggregate output, TTFT |
+| Receipt | exact argv or shell command, source artifact, normalization status |
+
+AutoRound INT4, AWQ INT4, Laguna's official symmetric INT4, and asymmetric
+W4A16 RTN are separate categories. They are not collapsed into a generic
+"INT4" bucket.
+
+## A few places worth opening first
+
+- [Qwen3.5-122B quant comparison](catalog/campaigns/qwen122b.md): the AutoRound
+  INT4 code run reached 110.5 tok/s against 92.7 tok/s for AWQ INT4 on the same
+  TP4, 220 W setup. That is a 19.2% difference, with both commands preserved.
+- [Qwen3.6-27B TP and P2P matrix](catalog/campaigns/tp-ab-p2p.md): TP4 won the
+  matched single-stream AutoRound run, 69.26 versus 53.8 tok/s. At concurrency
+  64, TP2 produced 473.1 aggregate tok/s versus 294.76 for TP4. The fastest
+  layout depends on the workload.
+- [KV-cache sweep](catalog/campaigns/kv-sweep.md): 55 runs across context depth
+  and KV formats, with separate metric semantics instead of one mixed ranking.
+- [Laguna S 2.1 DFlash matrix](catalog/campaigns/laguna-dflash.md): target-only,
+  K7, and K15 measurements across short prompts, long context, prefix reuse,
+  and concurrency.
+
+Those are examples, not global winners. Use rows from the same campaign when
+calculating ratios.
+
+## Query it in 20 seconds
+
+The SQLite file contains the same 638 rows as the public JSONL:
+
+```bash
+git clone https://github.com/alesha-pro/4x3090-llm-benchmarks.git
+cd 4x3090-llm-benchmarks
+
+sqlite3 -header -column data/benchmarks.sqlite '
+  SELECT model, quant, engine, tp, context_len, output_tok_s
+  FROM runs
+  WHERE model = "Qwen3.6-27B"
+    AND output_tps_kind = "single_stream_wall"
+  ORDER BY output_tok_s DESC;
+'
+```
+
+Or use the JSONL helper:
+
+```bash
+python3 scripts/query.py --model Qwen3.5-122B
+python3 scripts/query.py --engine llama.cpp --limit 10
+python3 scripts/query.py --campaign tp-ab-p2p
+```
+
+More examples are in [QUERYING.md](QUERYING.md).
 
 ## Snapshot
 
@@ -39,50 +106,33 @@ retain an exact argv or command.
 | Exact launch argv or command | 637 |
 <!-- archive-stats:end -->
 
-The dataset covers single-request decode, saturated aggregate throughput,
-context-depth curves, KV-cache formats, quantization comparisons, speculative
-decoding, and a few engine or version checks. Coverage varies by campaign.
+The rig is 4x RTX 3090 on PCIe 3.0 x16, with 96 GB of VRAM and no NVLink.
+CUDA P2P is enabled and verified through transfers on all 12 directed GPU
+pairs. Most runs use a 220 W power limit per card. See [HARDWARE.md](HARDWARE.md)
+for the CPU, driver, CUDA, and per-card limits.
 
-## Data files
+## Repository map
 
-- [`data/benchmarks.jsonl`](data/benchmarks.jsonl) is the public source of truth.
-- [`data/benchmarks.sqlite`](data/benchmarks.sqlite) contains the same 638 rows
-  in the `runs` table.
-- [`data/snapshot.json`](data/snapshot.json) records counts, date range, and the
-  SHA256 of the JSONL snapshot.
-- [`catalog/`](catalog/README.md) is generated from the JSONL. It includes one
-  page per run, with the launch command and retained provenance.
+| Path | Contents |
+|---|---|
+| [`data/benchmarks.jsonl`](data/benchmarks.jsonl) | Public source of truth |
+| [`data/benchmarks.sqlite`](data/benchmarks.sqlite) | The same rows in a queryable `runs` table |
+| [`catalog/`](catalog/README.md) | Models, campaigns, engines, and one page per run |
+| [`METHODOLOGY.md`](METHODOLOGY.md) | Comparison rules, metric meanings, and limitations |
+| [`scripts/query.py`](scripts/query.py) | Small dependency-free JSONL query helper |
 
-Local paths are replaced with variables such as `${MODEL_ROOT}` and
-`${ENGINE_ROOT}` before publication. The public SQLite file is rebuilt from the
-sanitized JSONL. It is not copied from my working database.
-
-## Quick query
-
-```bash
-sqlite3 -header -column data/benchmarks.sqlite '
-  SELECT model, quant, engine, tp, context_len, output_tok_s
-  FROM runs
-  WHERE model = "Qwen3.6-27B"
-    AND output_tps_kind = "single_stream_wall"
-  ORDER BY output_tok_s DESC;
-'
-```
-
-Or use the small JSONL helper:
-
-```bash
-python3 scripts/query.py --model Qwen3.5-122B
-```
+Local paths are replaced with `${MODEL_ROOT}`, `${ENGINE_ROOT}`, and similar
+variables before publication. The public SQLite file is rebuilt from the
+sanitized JSONL rather than copied from the working database.
 
 ## Related work
 
 - [club-3090 discussion #798](https://github.com/noonghunna/club-3090/discussions/798)
   is where I offered matched slices from this archive.
 - [club-3090 discussion #773](https://github.com/noonghunna/club-3090/discussions/773)
-  contains the 4-card TP, P2P, power, KV-depth, and custom all-reduce work.
+  covers the TP, P2P, power, KV-depth, and custom all-reduce investigation.
 - [laguna-dflash-4x3090](https://github.com/alesha-pro/laguna-dflash-4x3090)
   contains full raw traces for one of the larger campaigns.
 
-Updates are manual. A new snapshot is imported, reviewed, committed, and pushed
-only when I choose to publish it.
+Updates are manual. I import a new snapshot, review the diff, and publish it
+when the data is ready.
