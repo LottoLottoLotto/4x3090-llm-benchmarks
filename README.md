@@ -12,10 +12,17 @@ This repository is the database I wanted. You can inspect one result in the
 [Markdown catalog](catalog/README.md), query all of them in SQLite, or take the
 JSONL and run your own analysis.
 
-[Browse the catalog](catalog/README.md) ·
-[Query the data](QUERYING.md) ·
-[Read the methodology](METHODOLOGY.md) ·
-[See the rig](HARDWARE.md)
+## Navigation
+
+| Open | What is there |
+|---|---|
+| [Models](catalog/README.md#browse-by-model) | All 14 model families and their runs |
+| [Benchmark campaigns](catalog/README.md#browse-by-campaign) | Matched experiments and test matrices |
+| [Engines](catalog/README.md#browse-by-engine) | vLLM, llama.cpp, and the experimental exllamav3 slice |
+| [Query guide](QUERYING.md) | Ready-to-run SQLite, JSONL, and Python examples |
+| [Methodology](METHODOLOGY.md) | Metric definitions, comparison rules, and limitations |
+| [Hardware](HARDWARE.md) | The 4x RTX 3090 rig, topology, power limits, and software versions |
+| [Dataset files](data/README.md) | JSONL, SQLite, snapshot metadata, and schema notes |
 
 <!-- archive-summary:start -->
 The archive currently has 638 measurements from 20 benchmark campaigns across
