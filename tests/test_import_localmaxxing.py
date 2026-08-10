@@ -377,6 +377,29 @@ class LocalMaxxingImporterTests(unittest.TestCase):
 
         self.assertEqual(str(raised.exception), "CLI dry-run failed: " + "x" * 4000)
 
+    def test_upload_defaults_to_pro_submission_pacing(self):
+        self.assertEqual(
+            importer.submission_interval("upload", None),
+            importer.DEFAULT_PRO_SUBMISSION_INTERVAL_SECONDS,
+        )
+        self.assertEqual(
+            importer.submission_interval("submit", None),
+            importer.DEFAULT_FREE_SUBMISSION_INTERVAL_SECONDS,
+        )
+        self.assertEqual(importer.submission_interval("upload", 42), 42)
+
+    def test_upload_requires_aggregate_acknowledgement(self):
+        entries = [
+            {"runId": "single", "metricKind": "single_stream_wall"},
+            {"runId": "aggregate", "metricKind": "aggregate_output"},
+        ]
+        with self.assertRaisesRegex(
+            importer.ImporterError,
+            "1 pending rows are aggregate throughput",
+        ):
+            importer.require_aggregate_acknowledgement(entries, False)
+        importer.require_aggregate_acknowledgement(entries, True)
+
     def test_executable_action_rejects_empty_ready_plan(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

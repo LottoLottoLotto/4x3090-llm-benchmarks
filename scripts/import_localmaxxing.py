@@ -32,6 +32,8 @@ DEFAULT_OUTPUT = ROOT / ".localmaxxing-import"
 DEFAULT_API_BASE = "https://www.localmaxxing.com"
 DEFAULT_HF_API_BASE = "https://huggingface.co"
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 60.0
+DEFAULT_FREE_SUBMISSION_INTERVAL_SECONDS = 121.0
+DEFAULT_PRO_SUBMISSION_INTERVAL_SECONDS = 13.0
 SUPPORTED_ENGINES = {"vllm", "llama.cpp", "exllamav3"}
 KNOWN_METRIC_KINDS = {"single_stream_wall", "aggregate_output"}
 KV_CACHE_DTYPES = {"q8_0", "q4_0", "fp8", "fp16", "auto"}
@@ -702,6 +704,28 @@ def execute_plan(
     return counts
 
 
+def submission_interval(action: str, requested: float | None) -> float:
+    if requested is not None:
+        return requested
+    if action == "upload":
+        return DEFAULT_PRO_SUBMISSION_INTERVAL_SECONDS
+    return DEFAULT_FREE_SUBMISSION_INTERVAL_SECONDS
+
+
+def require_aggregate_acknowledgement(
+    entries: list[dict[str, Any]],
+    allowed: bool,
+) -> None:
+    aggregate = sum(
+        entry.get("metricKind") == "aggregate_output" for entry in entries
+    )
+    if aggregate and not allowed:
+        raise ImporterError(
+            f"{aggregate} pending rows are aggregate throughput; review them and pass "
+            "--allow-aggregate-submit to acknowledge leaderboard mixing"
+        )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Safely plan, validate, or submit the benchmark archive to LocalMaxxing."
@@ -754,8 +778,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--interval-seconds",
         type=float,
-        default=121.0,
-        help="delay between public submissions; default stays below 30/hour",
+        default=None,
+        help=(
+            "delay between public submissions; defaults to 13 seconds for the Pro "
+            "archive upload and 121 seconds for other submission commands"
+        ),
     )
     parser.add_argument(
         "--request-timeout-seconds",
@@ -807,6 +834,7 @@ def main(argv: list[str] | None = None) -> None:
             args.allow_partial_metrics = True
             if args.model_map is None:
                 args.model_map = DEFAULT_MODEL_MAP
+        args.interval_seconds = submission_interval(args.action, args.interval_seconds)
         validate_arguments(args)
         rows = selected_rows(load_jsonl(args.source), args)
         model_map = load_model_map(args.model_map)
@@ -853,6 +881,10 @@ def main(argv: list[str] | None = None) -> None:
                 raise ImporterError(
                     f"no rows are ready for upload; inspect {args.output_dir / 'summary.json'}"
                 )
+            require_aggregate_acknowledgement(
+                ready,
+                args.allow_aggregate_submit,
+            )
             submit_receipts = args.output_dir / "submit-receipts.jsonl"
             submitted = completed_run_ids(submit_receipts, "submit")
             ambiguous = receipt_run_ids(submit_receipts, "submit", "ambiguous") - submitted
@@ -921,12 +953,10 @@ def main(argv: list[str] | None = None) -> None:
                     f"{unresolved} rows have unresolved model IDs; provide --model-map or "
                     "explicitly use --allow-partial"
                 )
-            aggregate = sum(entry.get("metricKind") == "aggregate_output" for entry in pending)
-            if aggregate and not args.allow_aggregate_submit:
-                raise ImporterError(
-                    f"{aggregate} pending rows are aggregate throughput; review them and pass "
-                    "--allow-aggregate-submit to acknowledge leaderboard mixing"
-                )
+            require_aggregate_acknowledgement(
+                pending,
+                args.allow_aggregate_submit,
+            )
             if args.confirm_count != len(pending):
                 raise ImporterError(
                     f"refusing public submission: --confirm-count must equal {len(pending)}"

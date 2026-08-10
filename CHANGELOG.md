@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-09
+
+- Required explicit aggregate-throughput acknowledgement for the archive upload path before any production validation or submission begins.
+- Added Pro-account pacing at 13 seconds per submission while preserving the 121-second free-account default for other submit commands.
+- Resolved the remaining Qwen3-4B and Qwen3.5-122B artifact aliases to source-verified Hugging Face repositories.
+
 ## 2026-07-28
 
 - Added the resumable LocalMaxxing importer with offline planning, model resolution, local and remote validation, and guarded public submission.

@@ -105,18 +105,21 @@ reports unresolved model aliases, validates through either `localmaxxing-cli`
 or the authenticated API, and resumes explicitly authorized submissions from
 append-only receipts.
 
-After authenticating with `lmx`, the reviewed archive has a one-command upload:
+After authenticating with `lmx`, the reviewed archive has a guarded one-command
+upload for a LocalMaxxing Pro account:
 
 ```bash
-./upload-localmaxxing
+./upload-localmaxxing --allow-aggregate-submit
 ```
 
-This command is intentionally a public-write operation. It loads the reviewed
-`model-map.json`, includes throughput-only partial rows, excludes unknown
-semantics and unresolved artifacts, production-dry-runs every ready payload,
-and only then begins paced submission. It reads the API key from
-`LMX_API_KEY` or the LocalMaxxing CLI config, writes durable receipts under
-`.localmaxxing-import/`, and resumes safely when run again.
+The acknowledgement is required because this archive contains aggregate-
+throughput measurements as well as single-stream results. This command is
+intentionally a public-write operation. It loads the reviewed `model-map.json`,
+includes throughput-only partial rows, excludes unknown semantics and unresolved
+artifacts, production-dry-runs every ready payload, and only then begins paced
+submission. It reads the API key from `LMX_API_KEY` or the LocalMaxxing CLI
+config, writes durable receipts under `.localmaxxing-import/`, and resumes
+safely when run again.
 
 Planning is offline and is the safe default. Candidate resolution performs only
 public `GET` searches against the LocalMaxxing catalog and Hugging Face; it
@@ -155,14 +158,15 @@ import.
 Use `--transport api` with `LMX_API_KEY` to bypass the CLI. Public submission is
 available as the separate `submit` action, but it refuses to run without an
 exact pending-row count and explicit acknowledgement of aggregate-throughput
-rows. It spaces submissions below the normal 30-per-hour limit and resumes
-successful rows from its receipt file. Run `--help` for all safety controls.
+rows. The archive-specific `upload` action requires the same aggregate
+acknowledgement.
 
-LocalMaxxing documents a rolling-hour submission limit rather than a fixed
-request deadline. The importer spaces submissions 121 seconds apart, honors
-`Retry-After` on HTTP 429 responses, and defaults each CLI or API call to a
-60-second client timeout. Override only the client deadline with
-`--request-timeout-seconds`; it does not change submission pacing.
+LocalMaxxing Pro accounts have a rolling-hour limit of 300 benchmark
+submissions. The archive uploader therefore spaces submissions 13 seconds
+apart; other submission commands retain the conservative free-account default
+of 121 seconds. Both paths honor `Retry-After` on HTTP 429 responses and default
+each CLI or API call to a 60-second client timeout. Override only the client
+deadline with `--request-timeout-seconds`; it does not change submission pacing.
 Because the API does not document idempotency, a submit timeout is recorded as
 `ambiguous`. Later submit runs stop until the operator confirms the run was not
 created remotely and explicitly passes `--retry-ambiguous`; dry-run timeouts
