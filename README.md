@@ -98,6 +98,76 @@ python3 scripts/query.py --campaign tp-ab-p2p
 
 More examples are in [QUERYING.md](QUERYING.md).
 
+## Prepare a LocalMaxxing import
+
+The dependency-free importer converts archive rows into LocalMaxxing payloads,
+reports unresolved model aliases, validates through either `localmaxxing-cli`
+or the authenticated API, and resumes explicitly authorized submissions from
+append-only receipts.
+
+After authenticating with `lmx`, the reviewed archive has a one-command upload:
+
+```bash
+./upload-localmaxxing
+```
+
+This command is intentionally a public-write operation. It loads the reviewed
+`model-map.json`, includes throughput-only partial rows, excludes unknown
+semantics and unresolved artifacts, production-dry-runs every ready payload,
+and only then begins paced submission. It reads the API key from
+`LMX_API_KEY` or the LocalMaxxing CLI config, writes durable receipts under
+`.localmaxxing-import/`, and resumes safely when run again.
+
+Planning is offline and is the safe default. Candidate resolution performs only
+public `GET` searches against the LocalMaxxing catalog and Hugging Face; it
+never chooses a repository automatically:
+
+```bash
+python3 scripts/import_localmaxxing.py plan --model-map model-map.json
+python3 scripts/import_localmaxxing.py resolve-models --model-map model-map.json
+# model-map.json contains source-verified mappings. Review model-candidates.json
+# and add only repositories known to contain the exact measured artifact.
+python3 scripts/import_localmaxxing.py validate-local --model-map model-map.json
+```
+
+Map the checkpoint artifact, not merely its base model. For example, a GGUF,
+AWQ, FP8, or AutoRound local alias should point to the repository containing
+that exact artifact. Mapping precedence is exact run ID, checkpoint reference,
+model variant, then model family. A family mapping is used only when the row has
+no checkpoint or variant alias, so it cannot silently relabel a quantized artifact.
+
+Authenticated API validation does not publish:
+
+```bash
+python3 scripts/import_localmaxxing.py dry-run --model-map model-map.json
+```
+
+The importer accepts `exllamav3`. LocalMaxxing's production API engine enum and
+generated OpenAPI/agent context must also include `exllamav3` before its rows
+will pass authenticated dry-run validation.
+
+Rows that contain output throughput but lack TTFT, prefill throughput, total
+throughput, and VRAM are excluded by default. Opt them in explicitly with
+`--allow-partial-metrics`; the generated payload contains `tokSOut` and omits
+the unavailable metrics. This does not opt unknown metric semantics into the
+import.
+
+Use `--transport api` with `LMX_API_KEY` to bypass the CLI. Public submission is
+available as the separate `submit` action, but it refuses to run without an
+exact pending-row count and explicit acknowledgement of aggregate-throughput
+rows. It spaces submissions below the normal 30-per-hour limit and resumes
+successful rows from its receipt file. Run `--help` for all safety controls.
+
+LocalMaxxing documents a rolling-hour submission limit rather than a fixed
+request deadline. The importer spaces submissions 121 seconds apart, honors
+`Retry-After` on HTTP 429 responses, and defaults each CLI or API call to a
+60-second client timeout. Override only the client deadline with
+`--request-timeout-seconds`; it does not change submission pacing.
+Because the API does not document idempotency, a submit timeout is recorded as
+`ambiguous`. Later submit runs stop until the operator confirms the run was not
+created remotely and explicitly passes `--retry-ambiguous`; dry-run timeouts
+remain ordinary, safe-to-repeat errors.
+
 ## Snapshot
 
 <!-- archive-stats:start -->
@@ -127,6 +197,7 @@ for the CPU, driver, CUDA, and per-card limits.
 | [`catalog/`](catalog/README.md) | Models, campaigns, engines, and one page per run |
 | [`METHODOLOGY.md`](METHODOLOGY.md) | Comparison rules, metric meanings, and limitations |
 | [`scripts/query.py`](scripts/query.py) | Small dependency-free JSONL query helper |
+| [`scripts/import_localmaxxing.py`](scripts/import_localmaxxing.py) | Plan, validate, and explicitly submit resumable LocalMaxxing imports |
 
 Local paths are replaced with `${MODEL_ROOT}`, `${ENGINE_ROOT}`, and similar
 variables before publication. The public SQLite file is rebuilt from the

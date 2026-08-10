@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-28
+
+- Added the resumable LocalMaxxing importer with offline planning, model resolution, local and remote validation, and guarded public submission.
+- Added append-only receipts, bounded CLI error capture, submission pacing, and a hard failure when executable actions select no ready rows.
+- Added artifact-matched or owner-confirmed repository mappings for all 265 archive rows that lacked Hugging Face IDs, and prevented family mappings from masking unresolved artifact aliases.
+- Added an explicit `--allow-partial-metrics` opt-in for throughput-only payloads while keeping unknown metric semantics excluded by default.
+- Documented the production rate-limit contract and added a configurable per-request timeout for both CLI and direct API transports.
+- Added `./upload-localmaxxing` to production-validate, pace, receipt, and resumably publish the reviewed archive with one command.
+
 ## 2026-07-27
 
 - Published the first normalized snapshot.
