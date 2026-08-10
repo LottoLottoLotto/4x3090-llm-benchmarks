@@ -98,79 +98,110 @@ python3 scripts/query.py --campaign tp-ab-p2p
 
 More examples are in [QUERYING.md](QUERYING.md).
 
-## Prepare a LocalMaxxing import
+## Uploading this archive to LocalMaxxing
 
-The dependency-free importer converts archive rows into LocalMaxxing payloads,
-reports unresolved model aliases, validates through either `localmaxxing-cli`
-or the authenticated API, and resumes explicitly authorized submissions from
-append-only receipts.
+LocalMaxxing turns the archive into searchable benchmark entries that can be
+filtered by model, quantization, engine, hardware, topology, context length, and
+workload. Publishing there makes the measurements discoverable without losing
+the commands and provenance that make them reproducible. It does not turn the
+archive into a global ranking: aggregate throughput and single-stream decode
+remain different measurement kinds and should still be compared within matched
+campaigns.
 
-After authenticating with `lmx`, the reviewed archive has a guarded one-command
-upload for a LocalMaxxing Pro account:
+### What gets uploaded
+
+For the current 638-row snapshot, the reviewed upload plan selects:
+
+| Upload decision | Rows | Why |
+|---|---:|---|
+| Ready for upload | 552 | Positive output throughput, known metric semantics, and an exact Hugging Face artifact mapping |
+| Excluded | 64 | Output throughput semantics are unknown |
+| Excluded | 22 | No output tok/s measurement is present |
+
+The 552 ready rows contain 137 single-stream measurements and 415 aggregate-
+throughput measurements. Throughput-only rows are included even when TTFT,
+prefill throughput, total throughput, or VRAM was not recorded; unavailable
+fields are omitted rather than invented.
+
+Each payload includes the available performance metrics plus the measured model
+artifact, quantization, engine and version, four-RTX-3090 hardware description,
+parallelism and concurrency, context and token counts, KV-cache and speculative-
+decoding settings, source run ID, notes, and the exact launch command when the
+archive contains one. `model-map.json` maps local checkpoint names to the
+repository containing the measured artifact instead of silently mapping every
+quant to its base model.
+
+### Run the reviewed uploader
+
+Install and authenticate `localmaxxing-cli` first. The key may be supplied
+through `LMX_API_KEY` or saved by `lmx`:
+
+```bash
+printf '%s\n' "$LMX_API_KEY" | lmx auth --key-stdin
+```
+
+Inspecting the complete selection is offline and does not publish anything:
+
+```bash
+python3 scripts/import_localmaxxing.py plan \
+  --model-map model-map.json \
+  --allow-partial-metrics
+```
+
+Authenticated production validation is also non-publishing:
+
+```bash
+python3 scripts/import_localmaxxing.py dry-run \
+  --transport api \
+  --model-map model-map.json \
+  --allow-partial-metrics
+```
+
+The archive-specific uploader performs the same plan, production-dry-runs every
+ready payload, and starts public submission only after every ready row validates:
 
 ```bash
 ./upload-localmaxxing --allow-aggregate-submit
 ```
 
-The acknowledgement is required because this archive contains aggregate-
-throughput measurements as well as single-stream results. This command is
-intentionally a public-write operation. It loads the reviewed `model-map.json`,
-includes throughput-only partial rows, excludes unknown semantics and unresolved
-artifacts, production-dry-runs every ready payload, and only then begins paced
-submission. It reads the API key from `LMX_API_KEY` or the LocalMaxxing CLI
-config, writes durable receipts under `.localmaxxing-import/`, and resumes
-safely when run again.
+`--allow-aggregate-submit` is deliberately required before any network
+validation or write because LocalMaxxing currently stores aggregate throughput
+and single-stream output tok/s in the same leaderboard metric. Passing it
+acknowledges that the 415 aggregate rows are intentionally being published and
+must not be compared as single-user decode rates.
 
-Planning is offline and is the safe default. Candidate resolution performs only
-public `GET` searches against the LocalMaxxing catalog and Hugging Face; it
-never chooses a repository automatically:
+The uploader assumes a LocalMaxxing Pro account. It waits 13 seconds between
+submissions, staying below the Pro limit of 300 benchmark submissions per
+rolling hour. A complete 552-row upload takes about two hours before retries.
+The generic `submit` action retains a free-account-safe 121-second default.
+Both paths honor `Retry-After` on HTTP 429 responses.
+
+### Safety and resuming
+
+Generated plans, payloads, and append-only receipts live under
+`.localmaxxing-import/`. Successful dry-runs and submissions are skipped when
+the command is run again, so an interrupted upload resumes instead of starting
+over.
+
+Submission requests use a 60-second client timeout by default. A submit timeout
+is recorded as `ambiguous` because the server may have committed the row before
+the connection failed. The next run stops until the operator checks
+LocalMaxxing for that source run ID; use `--retry-ambiguous` only after
+confirming the row was not created. Dry-run timeouts are safe to repeat.
+
+For manual model resolution, `resolve-models` performs only public `GET`
+searches against LocalMaxxing and Hugging Face and never chooses a repository
+automatically:
 
 ```bash
-python3 scripts/import_localmaxxing.py plan --model-map model-map.json
 python3 scripts/import_localmaxxing.py resolve-models --model-map model-map.json
-# model-map.json contains source-verified mappings. Review model-candidates.json
-# and add only repositories known to contain the exact measured artifact.
-python3 scripts/import_localmaxxing.py validate-local --model-map model-map.json
 ```
 
-Map the checkpoint artifact, not merely its base model. For example, a GGUF,
-AWQ, FP8, or AutoRound local alias should point to the repository containing
-that exact artifact. Mapping precedence is exact run ID, checkpoint reference,
-model variant, then model family. A family mapping is used only when the row has
-no checkpoint or variant alias, so it cannot silently relabel a quantized artifact.
-
-Authenticated API validation does not publish:
-
-```bash
-python3 scripts/import_localmaxxing.py dry-run --model-map model-map.json
-```
-
-The importer accepts `exllamav3`. LocalMaxxing's production API engine enum and
-generated OpenAPI/agent context must also include `exllamav3` before its rows
-will pass authenticated dry-run validation.
-
-Rows that contain output throughput but lack TTFT, prefill throughput, total
-throughput, and VRAM are excluded by default. Opt them in explicitly with
-`--allow-partial-metrics`; the generated payload contains `tokSOut` and omits
-the unavailable metrics. This does not opt unknown metric semantics into the
-import.
-
-Use `--transport api` with `LMX_API_KEY` to bypass the CLI. Public submission is
-available as the separate `submit` action, but it refuses to run without an
-exact pending-row count and explicit acknowledgement of aggregate-throughput
-rows. The archive-specific `upload` action requires the same aggregate
-acknowledgement.
-
-LocalMaxxing Pro accounts have a rolling-hour limit of 300 benchmark
-submissions. The archive uploader therefore spaces submissions 13 seconds
-apart; other submission commands retain the conservative free-account default
-of 121 seconds. Both paths honor `Retry-After` on HTTP 429 responses and default
-each CLI or API call to a 60-second client timeout. Override only the client
-deadline with `--request-timeout-seconds`; it does not change submission pacing.
-Because the API does not document idempotency, a submit timeout is recorded as
-`ambiguous`. Later submit runs stop until the operator confirms the run was not
-created remotely and explicitly passes `--retry-ambiguous`; dry-run timeouts
-remain ordinary, safe-to-repeat errors.
+Map the checkpoint artifact, not merely its base model. A GGUF, AWQ, FP8, or
+AutoRound alias should point to the repository containing that exact artifact.
+Mapping precedence is exact run ID, checkpoint reference, model variant, then
+model family. Family mappings are used only when a row has no checkpoint or
+variant alias, preventing a quantized artifact from being silently relabeled.
 
 ## Snapshot
 
