@@ -133,6 +133,10 @@ quant to its base model.
 
 ### Run the reviewed uploader
 
+Agents should follow the executable preflight, validation, upload, resume, and
+completion-report sequence in [`AGENTS.md`](AGENTS.md). It includes the
+public-write authorization boundary and ambiguous-timeout recovery rules.
+
 Install and authenticate `localmaxxing-cli` first. The key may be supplied
 through `LMX_API_KEY` or saved by `lmx`:
 

@@ -5,6 +5,7 @@
 - Required explicit aggregate-throughput acknowledgement for the archive upload path before any production validation or submission begins.
 - Added Pro-account pacing at 13 seconds per submission while preserving the 121-second free-account default for other submit commands.
 - Resolved the remaining Qwen3-4B and Qwen3.5-122B artifact aliases to source-verified Hugging Face repositories.
+- Added an agent-discoverable upload runbook with explicit preflight, validation, public-write authorization, resume, and ambiguous-timeout recovery sequences.
 
 ## 2026-07-28
 
