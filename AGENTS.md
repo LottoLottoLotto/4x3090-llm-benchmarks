@@ -31,17 +31,29 @@ If these counts change, stop before public submission. Inspect the changed archi
 
 Run from the repository root.
 
-1. Confirm `lmx --version` succeeds.
-2. Confirm `model-map.json`, `data/benchmarks.jsonl`, and `upload-localmaxxing` are present.
+1. Install or update to `localmaxxing-cli` v0.1.33 or newer, then confirm `lmx version --json` succeeds.
+2. Confirm the current CLI exposes `lmx speed-test validate-local`, `dry-run`, and `submit`; the removed `lmx benchmark ...` command group is incompatible.
 3. Confirm the operator has explicitly authorized public upload of both single-stream and aggregate-throughput rows.
 4. Confirm the authenticated LocalMaxxing account is Pro.
 5. Confirm authentication exists through `LMX_API_KEY` or the saved `lmx` config. Do not display the key.
+6. Confirm `model-map.json`, `data/benchmarks.jsonl`, and `upload-localmaxxing` are present.
 
 If `lmx` is not installed, use the release instructions linked from `README.md`. To save an environment-provided key without exposing it in process arguments:
 
 ```bash
 printf '%s\n' "$LMX_API_KEY" | lmx auth --key-stdin
 ```
+
+The importer CLI transport uses the current command contract:
+
+```bash
+lmx speed-test validate-local <payload.json>
+lmx speed-test dry-run <payload.json>
+lmx speed-test submit <payload.json>
+```
+
+Use `lmx update` when an older release is installed. Do not substitute the
+obsolete `lmx benchmark ...` commands.
 
 ## Sequence 2: offline plan
 

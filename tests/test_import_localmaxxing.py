@@ -367,6 +367,30 @@ class LocalMaxxingImporterTests(unittest.TestCase):
                     request_timeout_seconds=90,
                 )
 
+    def test_cli_transport_uses_speed_test_command_group(self):
+        completed = subprocess.CompletedProcess(
+            args=["lmx"], returncode=0, stdout='{"valid":true}\n', stderr=""
+        )
+        with mock.patch.object(
+            importer.subprocess,
+            "run",
+            return_value=completed,
+        ) as run:
+            result = importer.run_cli("lmx", "dry-run", Path("payload.json"))
+
+        self.assertEqual(result, {"valid": True})
+        self.assertEqual(
+            run.call_args.args[0],
+            [
+                "lmx",
+                "speed-test",
+                "dry-run",
+                "payload.json",
+                "--json",
+                "--quiet",
+            ],
+        )
+
     def test_cli_error_detail_is_bounded(self):
         failed = subprocess.CompletedProcess(
             args=["lmx"], returncode=1, stdout="", stderr="x" * 5000

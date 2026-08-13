@@ -554,8 +554,14 @@ def run_cli(
     payload_path: Path,
     request_timeout_seconds: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,
 ) -> Any:
-    command_action = "validate-local" if action == "validate-local" else action
-    command = [lmx, "benchmark", command_action, str(payload_path), "--json", "--quiet"]
+    command = [
+        lmx,
+        "speed-test",
+        action,
+        str(payload_path),
+        "--json",
+        "--quiet",
+    ]
     try:
         process = subprocess.run(
             command,
@@ -566,11 +572,11 @@ def run_cli(
         )
     except subprocess.TimeoutExpired as exc:
         raise ImporterError(
-            f"CLI {command_action} timed out after {request_timeout_seconds:g} seconds"
+            f"CLI {action} timed out after {request_timeout_seconds:g} seconds"
         ) from exc
     if process.returncode != 0:
         detail = (process.stderr.strip() or process.stdout.strip())[-4000:]
-        raise ImporterError(f"CLI {command_action} failed: {detail}")
+        raise ImporterError(f"CLI {action} failed: {detail}")
     return parse_response(process.stdout)
 
 

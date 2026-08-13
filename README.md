@@ -137,7 +137,16 @@ Agents should follow the executable preflight, validation, upload, resume, and
 completion-report sequence in [`AGENTS.md`](AGENTS.md). It includes the
 public-write authorization boundary and ambiguous-timeout recovery rules.
 
-Install and authenticate `localmaxxing-cli` first. The key may be supplied
+Install or update to `localmaxxing-cli` v0.1.33 or newer first:
+ 
+```bash
+lmx update
+lmx version --json
+```
+
+The importer uses the current `lmx speed-test validate-local|dry-run|submit`
+command group; older `lmx benchmark ...` commands are no longer supported.
+The key may be supplied
 through `LMX_API_KEY` or saved by `lmx`:
 
 ```bash
